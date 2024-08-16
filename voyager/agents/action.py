@@ -14,7 +14,7 @@ from voyager.control_primitives_context import load_control_primitives_context
 class ActionAgent:
     def __init__(
         self,
-        model_name="gpt-3.5-turbo",
+        model_name="gpt-4o-mini",
         temperature=0,
         request_timout=120,
         ckpt_dir="ckpt",
@@ -83,7 +83,7 @@ class ActionAgent:
             "smeltItem",
             "killMob",
         ]
-        if not self.llm.model_name == "gpt-3.5-turbo":
+        if not self.llm.model_name == "gpt-4o-mini":
             base_skills += [
                 "useChest",
                 "mineflayer",

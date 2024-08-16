@@ -13,6 +13,7 @@ const Status = require("./lib/observation/status");
 const Inventory = require("./lib/observation/inventory");
 const OnSave = require("./lib/observation/onSave");
 const Chests = require("./lib/observation/chests");
+const parentPort = require("worker_threads").parentPort;
 const { plugin: tool } = require("mineflayer-tool");
 
 let bot = null;
@@ -22,6 +23,20 @@ const app = express();
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use(bodyParser.urlencoded({ limit: "50mb", extended: false }));
 
+let paused = false;
+
+// Express route to send pause request to Python
+app.post("/set-pause", (req, res) => {
+    const { state } = req.body;
+    paused = state;
+    res.json({ message: `Paused state set to ${paused}` });
+});
+
+// Express route to resume the bot 
+app.get("/get-pause", (req, res) => {
+    res.json({ paused });
+});
+
 app.post("/start", (req, res) => {
     if (bot) onDisconnect("Restarting bot");
     bot = null;
@@ -29,7 +44,7 @@ app.post("/start", (req, res) => {
     bot = mineflayer.createBot({
         host: "localhost", // minecraft server ip
         port: req.body.port, // minecraft server port
-        username: "bot",
+        username: "ImBetterThanU",
         disableChatSigning: true,
         checkTimeoutInterval: 60 * 60 * 1000,
     });
@@ -50,6 +65,39 @@ app.post("/start", (req, res) => {
     });
 
     bot.once("spawn", async () => {
+      
+        // Allows for direct control in minecraft chat for !voyager {*command*} to pause, resume, or stop the bot
+        bot.on('chat', (username, message) => {
+            if (username === bot.username) return; // Ignore the bot's own messages
+
+            if (message === '!voyager pause' && !paused) {
+                paused = true;
+                bot.chat('Voyager is now paused.');
+                // Send the paused state to Python
+                fetch('http://localhost:3000/set-pause', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ state: true }),
+                });
+            } else if (message === '!voyager resume' && paused) {
+                paused = false;
+                bot.chat('Voyager has resumed.');
+                // Send the resume state to Python
+                fetch('http://localhost:3000/set-pause', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ state: false }),
+                });
+            } else if (message === '!voyager stop') {
+                bot.end();
+                bot.chat('Voyager is now stopped.');
+            }
+        });
+
         bot.removeListener("error", onConnectionFailed);
         let itemTicks = 1;
         if (req.body.reset === "hard") {
@@ -95,19 +143,21 @@ app.post("/start", (req, res) => {
             bot.iron_pickaxe = true;
         }
 
+        // Commenting out lines 152 + 157 and uncommenting 159 +160 Allows Voyager to work on Local LAN servers instead of Microsoft Azure
+        
         const { pathfinder } = require("mineflayer-pathfinder");
         const tool = require("mineflayer-tool").plugin;
         const collectBlock = require("mineflayer-collectblock").plugin;
         const pvp = require("mineflayer-pvp").plugin;
-        const minecraftHawkEye = require("minecrafthawkeye");
+        // const minecraftHawkEye = require("minecrafthawkeye");
         bot.loadPlugin(pathfinder);
         bot.loadPlugin(tool);
         bot.loadPlugin(collectBlock);
         bot.loadPlugin(pvp);
-        bot.loadPlugin(minecraftHawkEye);
+        // bot.loadPlugin(minecraftHawkEye);
 
-        // bot.collectBlock.movements.digCost = 0;
-        // bot.collectBlock.movements.placeCost = 0;
+        bot.collectBlock.movements.digCost = 0;
+        bot.collectBlock.movements.placeCost = 0;
 
         obs.inject(bot, [
             OnChat,
@@ -148,6 +198,7 @@ app.post("/start", (req, res) => {
         bot = null;
     }
 });
+
 
 app.post("/step", async (req, res) => {
     // import useful package
@@ -224,13 +275,14 @@ app.post("/step", async (req, res) => {
 
     bot.on("physicTick", onTick);
 
+    
     // initialize fail count
     let _craftItemFailCount = 0;
     let _killMobFailCount = 0;
     let _mineBlockFailCount = 0;
     let _placeItemFailCount = 0;
     let _smeltItemFailCount = 0;
-
+    
     // Retrieve array form post bod
     const code = req.body.code;
     const programs = req.body.programs;
@@ -249,7 +301,6 @@ app.post("/step", async (req, res) => {
         res.json(bot.observe());
     }
     bot.removeListener("physicTick", onTick);
-
     async function evaluateCode(code, programs) {
         // Echo the code produced for players to see it. Don't echo when the bot code is already producing dialog or it will double echo
         try {
@@ -259,6 +310,7 @@ app.post("/step", async (req, res) => {
             return err;
         }
     }
+
 
     function onStuck(posThreshold) {
         const currentPos = bot.entity.position;

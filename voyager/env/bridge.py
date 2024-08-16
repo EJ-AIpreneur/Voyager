@@ -75,12 +75,14 @@ class VoyagerEnv(gym.Env):
             # if self.mc_instance:
             #     self.mc_instance.check_process()
             #     if not self.mc_instance.is_running:
+
             print("Starting Minecraft server")
             self.mc_instance.run()
             self.mc_port = self.mc_instance.port
             self.reset_options["port"] = self.mc_instance.port
             print(f"Server started on port {self.reset_options['port']}")
         retry = 0
+
         while not self.mineflayer.is_running:
             print("Mineflayer process has exited, restarting")
             self.mineflayer.run()
@@ -107,6 +109,7 @@ class VoyagerEnv(gym.Env):
         code: str,
         programs: str = "",
     ) -> Tuple[ObsType, SupportsFloat, bool, bool, Dict[str, Any]]:
+        
         if not self.has_reset:
             raise RuntimeError("Environment has not been reset yet")
         self.check_process()
@@ -187,3 +190,4 @@ class VoyagerEnv(gym.Env):
             else:
                 print(res.json())
         return self.server_paused
+
